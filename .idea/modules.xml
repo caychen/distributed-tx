@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/distributed-tx.iml" filepath="$PROJECT_DIR$/distributed-tx.iml" />
+      <module fileurl="file://$PROJECT_DIR$/distributed-tx-seata/distributed-tx-seata.iml" filepath="$PROJECT_DIR$/distributed-tx-seata/distributed-tx-seata.iml" />
+      <module fileurl="file://$PROJECT_DIR$/distributed-tx-seata/distributed-tx-seata-bank1/distributed-tx-seata-bank1.iml" filepath="$PROJECT_DIR$/distributed-tx-seata/distributed-tx-seata-bank1/distributed-tx-seata-bank1.iml" />
+      <module fileurl="file://$PROJECT_DIR$/distributed-tx-seata/distributed-tx-seata-bank2/distributed-tx-seata-bank2.iml" filepath="$PROJECT_DIR$/distributed-tx-seata/distributed-tx-seata-bank2/distributed-tx-seata-bank2.iml" />
+    </modules>
+  </component>
+</project>

@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: distributed-tx-seata-bank1
+  cloud:
+    nacos:
+      config:
+        server-addr: localhost:8848
+        username: nacos
+        password: nacos
+        namespace: public
+        file-extension: yml
+
+    alibaba:
+      seata:
+        # 事务分组配置
+        tx-service-group: my_test_tx_group
+
+# 防止nacos狂刷
+logging:
+  level:
+    com.alibaba.nacos.client: error
+
+ribbon:
+  ConnectTimeout: 3000
+  ReadTimeout: 6000
