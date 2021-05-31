@@ -275,7 +275,7 @@ mybatis-plus:
 
 ##### 3.1.3.1、下载Seata-Server文件
 
-附上Seata项目的Github链接: https://github.com/seata，以及官网文档链接：https://seata.io/zh-cn/index.html，其中seata的脚本和配置文件都在https://github.com/seata/seata/tree/develop/script目录下。
+附上Seata项目的[Github链接](https://github.com/seata)，以及[官网文档链接](https://seata.io/zh-cn/index.html)，其中seata的脚本和配置文件都在其他版本的[script目录下](https://github.com/seata/seata/tree/develop/script)。
 
 ##### 3.1.3.2、修改Seata的配置文件registry.conf
 
