@@ -53,6 +53,7 @@ public class TransferServiceImpl implements ITransferService {
         //远程调用
         isOk = isOk && bank2FeignClient.transferMoney(transferRequest);
 
+        //人为制造异常
         if (transferRequestMoney.compareTo(new BigDecimal("4")) == 0) {
             throw new Exception("人为制造异常");
         }
