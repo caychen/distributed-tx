@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8082
 
 spring:
   application:
@@ -12,11 +12,6 @@ spring:
         password: nacos
         namespace: public
         file-extension: yml
-
-    alibaba:
-      seata:
-        # 事务分组配置
-        tx-service-group: my_test_tx_group
 
 # 防止nacos狂刷
 logging:
