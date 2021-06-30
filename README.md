@@ -199,7 +199,7 @@ mybatis-plus:
 
 **这个定理在迄今为止的分布式系统中都是适用的！**
 
-解决方案大体可以分为以下几种形式，各形式适用的场景各不相同，意思就是说，**即使当前场景适用，换到其它场景也不一定适用**。
+解决方案大体可以分为以下几种形式，各形式适用的场景各不相同，意思就是说，**即使当前场景适用，换到其它场景可能就不一定适用**。
 
 * 2PC：两阶段提交协议
 
@@ -215,9 +215,9 @@ mybatis-plus:
 
 
 
-### 3.1、2PC（两阶段提交协议）
+## 4、分布式事务解决方案之2PC（两阶段提交协议）
 
-#### 3.1.1、理论知识
+### 4.1、基础理论及流程
 
 两阶段协议可以用于单机集中式系统，由事务管理器协调多个资源管理器；也可以用于分布式系统，**「由一个全局的事务管理器协调各个子系统的局部事务管理器完成两阶段提交」**。
 
@@ -233,7 +233,7 @@ mybatis-plus:
 
 ![2PC全流程](./images/2PC全流程.png)
 
-##### 3.1.1.1、投票阶段
+#### 4.1.1、投票阶段/准备阶段
 
 第一个阶段是**「投票阶段」**。
 
@@ -247,7 +247,7 @@ mybatis-plus:
 
 
 
-##### 3.1.1.2、决定阶段/提交阶段
+#### 4.1.2、决定阶段/提交阶段
 
 第二个阶段是**「决定阶段」**。
 
@@ -264,7 +264,7 @@ mybatis-plus:
 
 
 
-#### 3.1.2、可能会存在哪些问题？
+### 4.2、可能会存在哪些问题？
 
 - **「单点故障」**：一旦事务管理器出现故障，整个系统不可用
 - **「数据不一致」**：在阶段二，如果事务管理器只发送了部分 commit 消息，此时网络发生异常，那么只有部分参与者接收到 commit 消息，也就是说只有部分参与者提交了事务，使得系统数据不一致。
@@ -273,13 +273,13 @@ mybatis-plus:
 
 
 
-#### 3.1.3、实践：使用Seata实现2PC
+### 4.3、实践：使用Seata实现2PC
 
-##### 3.1.3.1、下载Seata-Server文件
+#### 4.3.1、下载Seata-Server文件
 
 附上Seata项目的[Github链接](https://github.com/seata)，以及[官网文档链接](https://seata.io/zh-cn/index.html)，其中seata的脚本和配置文件都在其他版本的[script目录下](https://github.com/seata/seata/tree/develop/script)。
 
-##### 3.1.3.2、修改Seata的配置文件registry.conf
+#### 4.3.2、修改Seata的配置文件registry.conf
 
 修改registry.conf之前请先备份好原始文件，以免修改错误无法回滚。
 
@@ -314,7 +314,7 @@ config {
 }
 ```
 
-##### 3.1.3.3、推送Seata配置到Nacos
+#### 4.3.3、推送Seata配置到Nacos
 
 * 拉取配置文件：
 
@@ -361,13 +361,13 @@ sh nacos-config.sh -h 127.0.0.1
 
 
 
-##### 3.1.3.4、重启Seata-Server
+#### 4.3.4、重启Seata-Server
 
 注意config.txt文件目录，默认放在解压的根目录下，而不是在seata-server-xxx目录下。如果重启成功，可以在Nacos上看到seata-server服务列表：
 
 ![推送seata配置到nacos之后seata-server服务列表](./images/推送seata配置到nacos之后seata-server服务列表.png)
 
-##### 3.1.3.5、执行sql脚本
+#### 4.3.5、执行sql脚本
 
 * 1、创建一个seata库，执行如下脚本：
 
@@ -455,13 +455,13 @@ CREATE TABLE IF NOT EXISTS `undo_log`
 
 
 
-##### 3.1.3.6、将registry.conf复制到项目的资源目录下
+#### 4.3.6、将registry.conf复制到项目的资源目录下
 
 ![拷贝registry.conf文件至项目资源目录resources下](./images/拷贝registry.conf文件至项目资源目录resources下.png)
 
 
 
-##### 3.1.3.7、添加seata依赖
+#### 4.3.7、添加seata依赖
 
 ```xml
 <dependency>
@@ -484,7 +484,7 @@ CREATE TABLE IF NOT EXISTS `undo_log`
 
 
 
-##### 3.1.3.8、修改bootstrap.yml 
+#### 4.3.8、修改bootstrap.yml 
 
 ```yaml
 #添加事务组
@@ -498,11 +498,107 @@ spring:
 
 
 
+#### 4.3.9、测试场景
+
+* distributed-tx-bank1逻辑正常，distributed-tx-bank2逻辑正常，流程正常结束；
+  * 测试省略；
+* distributed-tx-bank1逻辑正常，distributed-tx-bank2逻辑异常；
+  * bank1捕获bank2抛出的异常，因为加了本地事务，自然会正常回滚，测试省略；
+* distributed-tx-bank1逻辑异常，distributed-tx-bank2无所谓；
+  * bank1都异常了，不会走bank2逻辑，正常回滚，测试省略；
+* （==**重点**==）distributed-tx-bank1逻辑正常，distributed-tx-bank2逻辑正常，然后在distributed-tx-bank1中手动抛异常，流程异常结束；
+
+贴下bank1的转账逻辑代码，如下：
+
+```java
+@Transactional
+@GlobalTransactional(rollbackFor = Exception.class)
+public Boolean transfer(TransferRequest transferRequest) throws Exception {
+    String xid = RootContext.getXID();
+    log.info("全局事务ID: [{}]", xid);
+
+    //转账金额
+    BigDecimal transferRequestMoney = transferRequest.getMoney();
+
+    Account account = accountMapper.selectById(transferRequest.getFromId());
+
+    if (account.getBalance().compareTo(transferRequestMoney) == -1) {
+        throw new Exception("余额不足, 无法转账");
+    }
+
+    //计算余额
+    BigDecimal newBalance = account.getBalance().subtract(transferRequestMoney);
+    account.setBalance(newBalance);
+    int affectCount = accountMapper.updateById(account);
+    Boolean isOk = affectCount == 1 ? true : false;
+
+    //远程调用
+    isOk = isOk && bank2FeignClient.transferMoney(transferRequest);
+
+    //人为制造异常
+    if (transferRequestMoney.compareTo(new BigDecimal("4")) == 0) {
+        throw new Exception("人为制造异常");
+    }
+
+    return isOk;
+}
+```
+
+为了方便演示Seata的分布式事务，以DEBUG模式启动bank1和bank2两个服务，并在bank1的人为制造异常的代码行打上断点，如下：
+
+```java
+if (transferRequestMoney.compareTo(new BigDecimal("4")) == 0)
+```
+
+使用IDEA自带的`generated-requests.http`功能快速生成接口，并执行：
+
+```json
+POST http://localhost:8080/v1/bank1/transfer
+Accept: */*
+Content-Type: application/json
+
+{
+  "fromId": 1,
+  "toId": 2,
+  "money": "4"
+}
+```
+
+代码停留在上述断点处，依次查看seata数据库和业务undo_log表数据：
+
+* seata库表
+
+  * global_table
+
+    ![](./images/global_table.png)
+
+  * branch_table
+
+    ![](./images/branch_table.png)
+
+  * lock_table
+
+    ![](./images/lock_table.png)
+
+* 业务undo_log表
+
+  ![](./images/bank2库的undo_log表.png)
+
+一旦bank1最后抛出异常之后，seata就会回滚事务，包括全局事务和分支事务，如图所示：
+
+![](./images/事务回滚.png)
+
+回滚完成之后，seata库中的表数据和业务undo_log表数据会被清空掉。
+
+正常提交事务的如下图：
+
+![](./images/正常提交.png)
 
 
 
 
-### 3PC（三阶段提交）
+
+## 分布式事务解决方案之3PC（三阶段提交）
 
 三阶段提交又称3PC，相对于2PC来说增加了CanCommit阶段和超时机制。如果一段时间内没有收到协调者的commit请求，那么就会自动进行commit，解决了2PC单点故障的问题。
 
@@ -518,9 +614,9 @@ spring:
 
 
 
-### TCC事务补偿
+## 分布式事务解决方案之TCC事务补偿
 
-#### 理论
+### 基础理论
 
 TCC 将事务提交分为 Try - Confirm - Cancel 3个操作。其和两阶段提交有点类似，Try为第一阶段，Confirm - Cancel为第二阶段，是一种**应用层面侵入业务的两阶段提交**。
 
@@ -554,9 +650,9 @@ TCC 事务机制相比于上面介绍的2PC，解决了其几个缺点：
 
 
 
-#### TCC需要解决的问题
+### TCC需要解决的问题
 
-##### 1、**幂等控制**
+#### 1、**幂等控制**
 
 使用TCC时要注意Try - Confirm - Cancel 3个操作的**幂等控制**，因为网络原因或者重试操作都有可能导致这几个操作的重复执行。
 
@@ -566,7 +662,7 @@ TCC 事务机制相比于上面介绍的2PC，解决了其几个缺点：
 
 
 
-##### 2、**空回滚**
+#### 2、**空回滚**
 
 如下图所示，事务协调器在调用TCC服务的一阶段Try操作时，可能会出现因为丢包而导致的网络超时，此时事务协调器会触发二阶段回滚，调用TCC服务的Cancel操作；
 
@@ -580,7 +676,7 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 
 
-##### 3、**防悬挂**
+#### 3、**防悬挂**
 
 如下图所示，事务协调器在调用TCC服务的一阶段Try操作时，可能会出现因网络拥堵而导致的超时，此时事务协调器会触发二阶段回滚，调用TCC服务的Cancel操作；在此之后，拥堵在网络上的一阶段Try数据包被TCC服务收到，出现了二阶段Cancel请求比一阶段Try请求先执行的情况；
 
@@ -596,30 +692,25 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 
 
-### 本地消息表
+## 分布式事务解决方案之本地消息表
 
 ![本地消息表](./images/本地消息表.png)
 
 执行流程：
 
 - 消息生产方，需要额外建一个消息表，并**「记录消息发送状态」**。消息表和业务数据要在一个事务里提交，也就是说他们要在一个数据库里面。然后消息会经过MQ发送到消息的消费方。
-
-- - 如果消息发送失败，会进行重试发送。
-
+  - 如果消息发送失败，会进行重试发送。
 - 消息消费方，需要**「处理」**这个**「消息」**，并完成自己的业务逻辑。
-
-- - 如果是**「业务上面的失败」**，可以给生产方**「发送一个业务补偿消息」**，通知生产方进行回滚等操作。
-
+  - 如果是**「业务上面的失败」**，可以给生产方**「发送一个业务补偿消息」**，通知生产方进行回滚等操作。
   - 此时如果本地事务处理成功，表明已经处理成功了
   - 如果处理失败，那么就会重试执行。
-
 - 生产方和消费方定时扫描本地消息表，把还没处理完成的消息或者失败的消息再发送一遍。
 
 
 
 
 
-### 基于可靠消息的最终一致性方案概述（消息事务）
+## 分布式事务解决方案之基于可靠消息的最终一致性方案概述（消息事务）
 
 消息事务的原理是将两个事务**「通过消息中间件进行异步解耦」**，和上述的本地消息表有点类似，但是是通过消息中间件的机制去做的，其本质就是'将本地消息表封装到了消息中间件中'。
 
@@ -627,7 +718,7 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 - 发送prepare消息到消息中间件
 - 发送成功后，执行本地事务
-- - 如果事务执行成功，则commit，消息中间件将消息下发至消费端
+  - 如果事务执行成功，则commit，消息中间件将消息下发至消费端
   - 如果事务执行失败，则回滚，消息中间件将这条prepare消息删除
 - 消费端接收到消息进行消费，如果消费失败，则不断重试
 
@@ -635,9 +726,7 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 
 
-
-
-### 最大努力通知
+## 分布式事务解决方案之最大努力通知
 
 最大努力通知的方案实现比较简单，适用于一些最终一致性要求较低的业务。
 
@@ -649,5 +738,5 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 
 
-## 4、总结
+## 总结
 
