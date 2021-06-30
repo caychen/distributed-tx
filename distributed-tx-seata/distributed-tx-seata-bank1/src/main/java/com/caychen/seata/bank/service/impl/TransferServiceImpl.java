@@ -36,20 +36,26 @@ public class TransferServiceImpl implements ITransferService {
         String xid = RootContext.getXID();
         log.info("全局事务ID: [{}]", xid);
 
+        BigDecimal transferRequestMoney = transferRequest.getMoney();
+
         Account account = accountMapper.selectById(transferRequest.getFromId());
 
-        if (account.getBalance().compareTo(transferRequest.getMoney()) == -1) {
+        if (account.getBalance().compareTo(transferRequestMoney) == -1) {
             throw new Exception("余额不足, 无法转账");
         }
 
         //计算余额
-        BigDecimal newBalance = account.getBalance().subtract(transferRequest.getMoney());
+        BigDecimal newBalance = account.getBalance().subtract(transferRequestMoney);
         account.setBalance(newBalance);
         int affectCount = accountMapper.updateById(account);
         Boolean isOk = affectCount == 1 ? true : false;
 
         //远程调用
         isOk = isOk && bank2FeignClient.transferMoney(transferRequest);
+
+        if (transferRequestMoney.compareTo(new BigDecimal("4")) == 0) {
+            throw new Exception("人为制造异常");
+        }
 
         return isOk;
     }
