@@ -1,9 +1,9 @@
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql:///distributed-tx-seata-bank2?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
-    username: root
-    password: 1qaz@WSX
+    url: jdbc:mysql://ip:port/distributed-tx-seata-bank2?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+    username: 'username'
+    password: 'password'
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8

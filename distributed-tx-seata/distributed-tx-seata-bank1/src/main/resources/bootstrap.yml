@@ -1,17 +1,25 @@
 server:
   port: 8081
 
+nacos-server: 192.168.213.129:8848
+nacos-username: nacos
+nacos-password: nacos
+
 spring:
   application:
     name: distributed-tx-seata-bank1
   cloud:
     nacos:
       config:
-        server-addr: localhost:8848
-        username: nacos
-        password: nacos
+        server-addr: ${nacos-server}
+        username: ${nacos-username}
+        password: ${nacos-password}
         namespace: public
         file-extension: yml
+      discovery:
+        server-addr: ${nacos-server}
+        username: ${nacos-username}
+        password: ${nacos-password}
 
 # 防止nacos狂刷
 logging:
@@ -21,3 +29,10 @@ logging:
 ribbon:
   ConnectTimeout: 3000
   ReadTimeout: 6000
+
+# seata服务器地址，默认为localhost:8091
+seata:
+  enabled: true
+  service:
+    grouplist:
+      default: 192.168.213.129:8091
