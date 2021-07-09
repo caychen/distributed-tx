@@ -6,7 +6,7 @@
 
 ### 1.1、Nacos准备
 
-* 1、下载Nacos压缩包并解压（这里为了方便，简单使用Windows环境）
+* 1、下载Nacos压缩包并解压
 
 * 2、执行Nacos脚本
 
@@ -21,9 +21,9 @@
 	  
 	  db.num=1
 	  
-	  db.url.0=jdbc:mysql://localhost:3306/nacos?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai
-	  db.user=root
-	  db.password=1qaz@WSX
+	  db.url.0=jdbc:mysql://ip:3306/nacos?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=Asia/Shanghai
+	  db.user='username'
+	  db.password='password'
 	  ```
 	
 	  
@@ -31,7 +31,10 @@
 
 ### 1.2、Nacos的启动
 
-这里使用简易版的windows环境启动单机Nacos
+这里为了方便，则只启动单机Nacos。
+
+如果是Windows系统的话，执行如下命令：
+
 ```text
 # 启动nacos
 startup.cmd -m standalone
@@ -39,7 +42,7 @@ startup.cmd -m standalone
 # 关闭nacos
 shutdown.cmd
 ```
-如果使用Linux系统的话，执行如下命令
+如果使用Linux系统的话，执行如下命令：
 ```text
 # 启动nacos
 sh startup.sh -m standalone
@@ -50,11 +53,13 @@ sh shutdown.sh
 
 Nacos启动之后，打开浏览器，输入`http://ip:8848/nacos`， 用户名密码默认`nacos/nacos`，就能看到Nacos界面了。
 
+如果使用Linux的话，需要把8848端口打开或者直接把防火墙firewalld关闭禁用。
+
 
 
 ### 1.3、Nacos项目配置
 
-根据每个项目，配置不同的内容，此次省略。但是如果使用`spring-cloud-starter-alibaba-nacos-xxx`的话，Spring和Nacos集成的配置项必须要使用`bootstrap.yml`或者`bootstrap.properties`才行：
+根据每个项目，配置不同的内容，此出省略。但是如果使用`spring-cloud-starter-alibaba-nacos-xxx`的话，Spring和Nacos集成的配置项必须要使用`bootstrap.yml`或者`bootstrap.properties`才行：
 
 ```yaml
 server:
@@ -66,7 +71,7 @@ spring:
   cloud:
     nacos:
       config:
-        server-addr: localhost:8848
+        server-addr: ip:8848
         username: nacos
         password: nacos
         namespace: public
@@ -76,6 +81,13 @@ spring:
 logging:
   level:
     com.alibaba.nacos.client: error
+    
+# seata服务器地址，默认为localhost:8091
+seata:
+  enabled: true
+  service:
+    grouplist:
+      default: ip:8091
 ```
 
 其余配置项都存放在Nacos上：
@@ -84,7 +96,7 @@ logging:
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql:///distributed-tx-seata-bank1?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://ip:3306/distributed-tx-seata-bank1?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
     username: xxxx
     password: xxxx
   jackson:
@@ -290,7 +302,7 @@ registry {
 
   nacos {
     application = "seata-server"
-    serverAddr = "127.0.0.1:8848"
+    serverAddr = "ip:8848"
     group = "SEATA_GROUP"
     namespace = ""
     cluster = "default"
@@ -304,7 +316,7 @@ config {
   type = "nacos"
 
   nacos {
-    serverAddr = "127.0.0.1:8848"
+    serverAddr = "ip:8848"
     namespace = ""
     group = "SEATA_GROUP"
     username = "nacos"
@@ -337,9 +349,9 @@ store.mode=db
 store.db.datasource=druid
 store.db.dbType=mysql
 store.db.driverClassName=com.mysql.cj.jdbc.Driver
-store.db.url=jdbc:mysql://127.0.0.1:3306/seata?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
-store.db.user=root
-store.db.password=1qaz@WSX
+store.db.url=jdbc:mysql://ip:3306/seata?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+store.db.user='username'
+store.db.password='password'
 store.db.minConn=5
 store.db.maxConn=30
 store.db.globalTable=global_table
@@ -352,7 +364,7 @@ store.db.maxWait=5000
 * 将config.txt保存到Seata解压的根目录，并推送到Nacos中（Linux直接使用Shell推送，Windows可以借助Gitbash进行推送）
 
 ```text
-sh nacos-config.sh -h 127.0.0.1
+sh nacos-config.sh -h ip(使用具体的Nacos服务器ip)
 ```
 
 * 打开Nacos地址，能看到Seata的配置文件已经推送到了Nacos服务器上，如图所示：
@@ -723,6 +735,10 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 - 消费端接收到消息进行消费，如果消费失败，则不断重试
 
 这种方案也是实现了**「最终一致性」**，对比本地消息表实现方案，不需要再建消息表，**「不再依赖本地数据库事务」**了，所以这种方案更适用于高并发的场景。目前市面上实现该方案的**「只有阿里的 RocketMQ」**。
+
+
+
+![](./images/RocketMQ分布式事务交互流程.jpg)
 
 
 
