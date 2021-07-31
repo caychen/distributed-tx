@@ -1,0 +1,51 @@
+server:
+  port: 8081
+
+# 实际虚拟机地址
+server-ip: 192.168.213.130
+
+nacos-server: ${server-ip}:8848
+
+spring:
+  application:
+    name: distributed-tx-msg-bank1
+  cloud:
+    nacos:
+      config:
+        server-addr: ${nacos-server}
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        namespace: ${nacos-namespace:public}
+        file-extension: yml
+        extension-configs:
+          - dataId: common_datasource.yml
+            refresh: true
+        enabled: true # 启用nacos配置，默认为true
+        max-retry: 5
+        config-long-poll-timeout: 30000
+      discovery:
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        server-addr: ${nacos-server}
+        namespace: ${nacos-namespace:public}
+#        register-enabled: true # 是否注册，默认true（注册）
+#        enabled: true # 启用服务发现功能， 默认为true
+
+# 防止nacos狂刷
+logging:
+  level:
+    com.alibaba.nacos.client: error
+
+ribbon:
+  ConnectTimeout: 3000
+  ReadTimeout: 6000
+
+rocketmq:
+  name-server: ${server-ip}:9876
+  producer:
+    group: producer_bank1 # 生产者的组
+
+bank1:
+  producer:
+    topic: msg_topic
+    tag: msg_topic_tag
