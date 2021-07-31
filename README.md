@@ -63,66 +63,7 @@ Nacos启动之后，打开浏览器，输入`http://ip:8848/nacos`， 用户名�
 
 ### 1.3、Nacos项目配置
 
-根据每个项目，配置不同的内容，此出省略。但是如果使用`spring-cloud-starter-alibaba-nacos-xxx`的话，Spring和Nacos集成的配置项必须要使用`bootstrap.yml`或者`bootstrap.properties`才行：
-
-```yaml
-server:
-  port: 8080
-
-spring:
-  application:
-    name: distributed-tx-seata-bank1
-  cloud:
-    nacos:
-      config:
-        server-addr: ip:8848
-        username: nacos
-        password: nacos
-        namespace: public
-        file-extension: yml
-
-# 防止nacos狂刷
-logging:
-  level:
-    com.alibaba.nacos.client: error
-    
-# seata服务器地址，默认为localhost:8091
-seata:
-  enabled: true
-  service:
-    grouplist:
-      default: ip:8091
-```
-
-其余配置项都存放在Nacos上：
-
-```yaml
-spring:
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://ip:3306/distributed-tx-seata-bank1?useSSL=false&useUnicode=true&characterEncoding=UTF-8&allowMultiQueries=true&serverTimezone=Asia/Shanghai
-    username: xxxx
-    password: xxxx
-  jackson:
-    date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: GMT+8
-
-mybatis-plus:
-  configuration:
-    # 驼峰下划线转换
-    map-underscore-to-camel-case: true
-    auto-mapping-behavior: full
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-  mapper-locations: classpath*:mapper/**/*Mapper.xml
-  global-config:
-    # 逻辑删除配置
-    db-config:
-      # 删除前
-      logic-not-delete-value: 1
-      # 删除后
-      logic-delete-value: 0
-  type-aliases-package: com.caychen.seata.bank.entity
-```
+根据每个项目，配置不同的内容，此处省略。但是如果使用`spring-cloud-starter-alibaba-nacos-xxx`的话，Spring和Nacos集成的配置项必须要用`bootstrap.yml`或者`bootstrap.properties`才行。
 
 
 
@@ -385,11 +326,14 @@ sh nacos-config.sh -h ip(使用具体的Nacos服务器ip)
 
 #### 4.3.5、执行sql脚本
 
+该两个文件已存放在项目根目录的sql/seata的目录中。
+
 * 1、创建一个seata库，执行如下脚本：
 
 ```sql
 create database seata character set utf8mb4;
 
+use seata;
 -- -------------------------------- The script used when storeMode is 'db' --------------------------------
 -- the table to store GlobalSession data
 CREATE TABLE IF NOT EXISTS `global_table`
@@ -448,9 +392,13 @@ CREATE TABLE IF NOT EXISTS `lock_table`
     DEFAULT CHARSET = utf8;
 ```
 
-* 2、在每个业务库中执行undo日志的脚本文件：
+* 2、新建bank1服务对应的数据库distributed-tx-seata-bank1，执行如下sql：
 
 ```sql
+create database distributed-tx-seata-bank1 character set utf8mb4;
+
+use distributed-tx-seata-bank1;
+
 -- for AT mode you must to init this sql for you business database. the seata server not need it.
 CREATE TABLE IF NOT EXISTS `undo_log`
 (
@@ -465,13 +413,58 @@ CREATE TABLE IF NOT EXISTS `undo_log`
     ) ENGINE = InnoDB
     AUTO_INCREMENT = 1
     DEFAULT CHARSET = utf8 COMMENT ='AT transaction mode undo table';
+
+DROP TABLE IF EXISTS `t_account`;
+CREATE TABLE `t_account`  (
+  `id` bigint(0) NOT NULL,
+  `account` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL comment '账户名',
+  `balance` decimal(5, 2) NOT NULL comment '账户余额',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic comment='账户表';
+
+INSERT INTO `t_account`(`id`, `account`, `balance`) VALUES (1, 'zhangsan', 100.00);
+
 ```
+  ![](./images/zhangsan余额.png)
 
-该两个文件已存放在项目根目录的sql/seata的目录中。
+* 3、新建bank2服务对应的数据库distributed-tx-seata-bank2，执行如下sql：
 
+```sql
+create database distributed-tx-seata-bank2 character set utf8mb4;
 
+use distributed-tx-seata-bank2;
+
+-- for AT mode you must to init this sql for you business database. the seata server not need it.
+CREATE TABLE IF NOT EXISTS `undo_log`
+(
+    `branch_id`     BIGINT       NOT NULL COMMENT 'branch transaction id',
+    `xid`           VARCHAR(128) NOT NULL COMMENT 'global transaction id',
+    `context`       VARCHAR(128) NOT NULL COMMENT 'undo_log context,such as serialization',
+    `rollback_info` LONGBLOB     NOT NULL COMMENT 'rollback info',
+    `log_status`    INT(11)      NOT NULL COMMENT '0:normal status,1:defense status',
+    `log_created`   DATETIME(6)  NOT NULL COMMENT 'create datetime',
+    `log_modified`  DATETIME(6)  NOT NULL COMMENT 'modify datetime',
+    UNIQUE KEY `ux_undo_log` (`xid`, `branch_id`)
+    ) ENGINE = InnoDB
+    AUTO_INCREMENT = 1
+    DEFAULT CHARSET = utf8 COMMENT ='AT transaction mode undo table';
+
+DROP TABLE IF EXISTS `t_account`;
+CREATE TABLE `t_account`  (
+  `id` bigint(0) NOT NULL,
+  `account` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL comment '账户名',
+  `balance` decimal(5, 2) NOT NULL comment '账户余额',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic comment='账户表';
+
+INSERT INTO `t_account`(`id`, `account`, `balance`) VALUES (2, 'lisi', 0.00);
+
+```
+  ![](./images/lisi余额.png)
 
 #### 4.3.6、将registry.conf复制到项目的资源目录下
+
+貌似这步可以忽略
 
 ![拷贝registry.conf文件至项目资源目录resources下](./images/拷贝registry.conf文件至项目资源目录resources下.png)
 
@@ -500,7 +493,127 @@ CREATE TABLE IF NOT EXISTS `undo_log`
 
 
 
-#### 4.3.8、修改bootstrap.yml 
+#### 4.3.8、修改项目配置文件
+
+##### 4.3.8.1、bank1项目的配置文件
+
+配置如下：
+
+```yaml
+server:
+  port: 8081
+
+# 实际虚拟机地址
+server-ip: 192.168.213.130
+
+nacos-server: ${server-ip}:8848
+
+spring:
+  application:
+    name: distributed-tx-seata-bank1
+  cloud:
+    nacos:
+      config:
+        server-addr: ${nacos-server}
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        namespace: ${nacos-namespace:public}
+        file-extension: yml
+        extension-configs:
+          - dataId: common_datasource.yml
+            refresh: true
+        enabled: true # 启用nacos配置，默认为true
+        max-retry: 5
+        config-long-poll-timeout: 30000
+      discovery:
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        server-addr: ${nacos-server}
+        namespace: ${nacos-namespace:public}
+#        register-enabled: true # 是否注册，默认true（注册）
+#        enabled: true # 启用服务发现功能， 默认为true
+
+# 防止nacos狂刷
+logging:
+  level:
+    com.alibaba.nacos.client: error
+
+ribbon:
+  ConnectTimeout: 3000
+  ReadTimeout: 6000
+
+# seata服务器地址，默认为localhost:8091
+seata:
+  enabled: true
+  service:
+    grouplist:
+      default: ${server-ip}:8091
+```
+
+其余配置项都存放在Nacos上：
+
+common_datasource.yml
+
+```yaml
+mysql:
+    host: 192.168.213.130
+    username: caychen
+    password: 1qaz@WSX
+```
+
+distributed-tx-seata-bank1.yml
+
+```yaml
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${mysql.host}:3306/distributed-tx-seata-bank1?useSSL=false&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+    username: ${mysql.username}
+    password: ${mysql.password}
+    hikari:
+      # 最小空闲连接数量
+      minimum-idle: 5
+      # 空闲连接存活最大时间，默认600000（10分钟）
+      idle-timeout: 180000
+      # 连接池最大连接数，默认是10
+      maximum-pool-size: 10
+      # 此属性控制从池返回的连接的默认自动提交行为,默认值：true
+      auto-commit: true
+      # 连接池名称
+      pool-name: MyHikariCP
+      # 此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
+      max-lifetime: 1800000
+      # 数据库连接超时时间,默认30秒，即30000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  cloud:
+    alibaba:
+      seata:
+        # 事务分组配置，重要！重要！重要！
+        tx-service-group: my_test_tx_group
+
+mybatis-plus:
+  configuration:
+    # 驼峰下划线转换
+    map-underscore-to-camel-case: true
+    auto-mapping-behavior: full
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  global-config:
+    # 逻辑删除配置
+    db-config:
+      # 删除前
+      logic-not-delete-value: 1
+      # 删除后
+      logic-delete-value: 0
+  type-aliases-package: com.caychen.seata.bank.entity
+```
+
+重点是要在配置文件中加入seata的事务分组，如下：
+
 
 ```yaml
 #添加事务组
@@ -511,6 +624,29 @@ spring:
 		# 事务分组配置
 		tx-service-group: my_test_tx_group
 ```
+
+
+
+##### 4.3.8.2、bank2项目的配置文件
+
+同bank1类似， 除了如下：
+
+```yaml
+server:
+  # 端口不一样
+  port: 8082
+
+spring:
+  application:
+    # 项目名不一样
+    name: distributed-tx-seata-bank2
+    
+  datasource:
+    # 数据库名不一样
+    url: jdbc:mysql://${mysql.host}:3306/distributed-tx-seata-bank2?useSSL=false&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+```
+
+
 
 
 
@@ -614,7 +750,7 @@ Content-Type: application/json
 
 
 
-## 分布式事务解决方案之3PC（三阶段提交）
+## 5、分布式事务解决方案之3PC（三阶段提交）
 
 三阶段提交又称3PC，相对于2PC来说增加了CanCommit阶段和超时机制。如果一段时间内没有收到协调者的commit请求，那么就会自动进行commit，解决了2PC单点故障的问题。
 
@@ -630,7 +766,7 @@ Content-Type: application/json
 
 
 
-## 分布式事务解决方案之TCC事务补偿
+## 6、分布式事务解决方案之TCC事务补偿
 
 ### 基础理论
 
@@ -708,7 +844,7 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 
 
-## 分布式事务解决方案之本地消息表
+## 7、分布式事务解决方案之本地消息表
 
 ![本地消息表](./images/本地消息表.png)
 
@@ -726,9 +862,11 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 
 
 
-## 分布式事务解决方案之基于可靠消息的最终一致性方案概述（消息事务）
+## 8、分布式事务解决方案之基于可靠消息的最终一致性方案概述（消息事务）
 
-消息事务的原理是将两个事务**「通过消息中间件进行异步解耦」**，和上述的本地消息表有点类似，但是是通过消息中间件的机制去做的，其本质就是'将本地消息表封装到了消息中间件中'。
+### 8.1 、基础理论
+
+消息事务的原理是将两个事务**「通过消息中间件进行异步解耦」**，和上述的本地消息表有点类似，但是是通过消息中间件的机制去做的，其本质就是“将本地消息表封装到了消息中间件中”。
 
 执行流程：
 
@@ -736,17 +874,1240 @@ TCC服务在未收到Try请求的情况下收到Cancel请求，这种场景被�
 - 发送成功后，执行本地事务
   - 如果事务执行成功，则commit，消息中间件将消息下发至消费端
   - 如果事务执行失败，则回滚，消息中间件将这条prepare消息删除
-- 消费端接收到消息进行消费，如果消费失败，则不断重试
+- 消费端接收到消息进行消费，如果消费失败，则不断重试。
 
-这种方案也是实现了**「最终一致性」**，对比本地消息表实现方案，不需要再建消息表，**「不再依赖本地数据库事务」**了，所以这种方案更适用于高并发的场景。目前市面上实现该方案的**「只有阿里的 RocketMQ」**。
+这种方案也是实现了**「最终一致性」**，对比本地消息表实现方案，不需要再建消息表，**「不再依赖本地数据库事务」**了，所以这种方案更适用于高并发的场景。目前市面上实现该方案的**「只有阿里的 RocketMQ」**，后来阿里将 **RocketMQ** 捐赠给 **Apache** 软件基金会，如今已成为 **Apache** 的顶级项目。
 
 
+
+### 8.2、RocketMQ执行流程
+
+**RocketMQ** 事务消息设计则主要为了解决 **Producer** 端的消息发送与本地事务执行的原子性问题， **RocketMQ** 的设计中 **Broker** 与 **Producer** 端的双向通信能力，使得 **Broker** 天生可以作为一个事务协调者存在；而 **RocketMQ** 本身提供的存储机制为事务消息提供了持久化能力；**RocketMQ** 的高可用机制以及可靠消息设计则为事务消息在系统发生异常时一人能够保证达成事务的最终一致性。
 
 ![](./images/RocketMQ分布式事务交互流程.jpg)
 
+借助上图来描述整个流程，其中：A服务为Producer消息发送方；B服务为MQ订阅方；
+
+流程如下：
+
+1.  **Producer 发送事务消息**
+
+   Producer （MQ 发送方）服务发送事务消息至 MQ Server，MQ Server 将消息状态标记为Prepared（预备状态，也称半消息 half message），此时这条消息在消费者（MQ 订阅方）是无法消费到的。
+
+2.  **MQ Server 回应消息发送成功**
+
+   MQ Server接收到 Producer 发给的消息，则回应发送成功，表示MQ已经接收到消息。
+
+3.  **Producer 执行本地事务**
+
+   Producer 端执行业务逻辑，通过本地数据库事务控制。
+
+4.  **消息投递**
+
+   （1）、若 Producer 本地事务执行成功，则自动向 MQ Server 发送 commit 消息，MQ Server 接收到 commit 消息后，将之前投递的半消息的状态标记为可消费，此时 MQ 订阅方则能正常消费消息；
+
+   （2）、若 Producer 本地事务执行失败，则自动向 MQ Server 发送 rollback 消息，MQ Server 接收到 rollback 消息后，会将原来的半消息进行删除；
+
+   （3）、MQ 订阅方消费消息，消费成功则向 MQ 回应ack，否则将重复接收消息。这里的ack默认自动回应，即程序执行正常则自动回应ack。
+
+5.  **事务回查**
+
+   如果在执行 Producer 端本地事务过程中，由于网络问题，导致服务宕机、重启或者超时等异常信息，MQ Server 将会不停的询问同组的其他 Producer 来获取事务执行状态，这个过程叫做 **事务回查**， MQ Server 会根据事务回查的结果来决定是否投递消息。
+
+以上主干流程已由 **RocketMQ** 实现，对于用户侧来说，只需要分别实现本地事务执行以及本地事务回查方法。
+
+```JAVA
+public interface RocketMQLocalTransactionListener {
+    //本地事务执行
+    RocketMQLocalTransactionState executeLocalTransaction(final Message msg, final Object arg);
+
+    // 本地事务回查
+    RocketMQLocalTransactionState checkLocalTransaction(final Message msg);
+}
+```
 
 
-## 分布式事务解决方案之最大努力通知
+
+
+### 8.3、RocketMQ简单使用
+
+#### 8.3.1、下载并解压
+
+从 [RocketMQ](http://rocketmq.apache.org/dowloading/releases/) 官网下载对应的压缩包并解压，如果使用的是Centos系统的话，请先上传再解压（废话）。
+
+![](./images/RocketMQ压缩包.png)
+
+
+
+#### 8.3.2、启动RocketMQ（以Centos为例）
+
+==**注意：RocketMQ 与 JDK11兼容性不好，该章节请尽量使用 jdk8，避免不必要的麻烦。**==
+
+在启动 RocketMQ 之前，需要修改 namesrv 和 broker 对应的 jvm 内存，默认8G，在学习使用阶段可以放小点，不然 RocketMQ 启动不了。
+
+进入RocketMQ 的 bin 目录，会看到 runserver.sh 和 runbroker.sh 两个脚本，使用 vi/vim，将 jvm 内存改为512m，如图：
+
+* 先修改 runserver.sh 文件：
+
+```
+vim runserver.sh
+
+修改jvm内存为512m
+
+!wq
+保存退出
+```
+
+![](./images/runserver修改jvm.png)
+
+
+
+* 再修改 runbroker.sh 文件：
+
+```
+vim runbroker.sh
+
+修改jvm内存为512m
+
+!wq
+保存退出
+```
+
+![](./images/runbroker修改jvm.png)
+
+
+
+* 启动namesrv
+
+  ```tex
+  nohup sh bin/mqnamesrv &
+  
+  # 查看namesrv日志
+  tail -f ~/logs/rocketmqlogs/namesrv.log
+  ```
+
+  ![](./images/namesrv启动日志.png)
+
+  看到这句话，说明 namesrv 启动成功。
+
+  
+
+* 启动broker
+
+  ```text
+  nohup sh bin/mqbroker -n 实际服务ip:9876 &
+  
+  # 查看broker日志
+  tail -f ~/logs/rocketmqlogs/broker.log 
+  ```
+
+  ![](./images/broker启动日志.png)
+
+  看到这句话，说明 broker 启动成功。
+
+
+
+#### 8.3.3、发送及接收消息
+
+我们可以使用 **RocketMQ** 提供的自带的Demo进行收发消息。
+
+依次打开两个console窗口，并进入到 RocketMQ 的 根目录下，依次执行如下命令：
+
+```text
+# 临时设置环境变量
+export NAMESRV_ADDR=ip:9876
+
+# 执行发送消息
+sh bin/tools.sh org.apache.rocketmq.example.quickstart.Producer
+```
+
+和
+
+```text
+# 临时设置环境变量
+export NAMESRV_ADDR=ip:9876
+
+# 消费消息
+sh bin/tools.sh org.apache.rocketmq.example.quickstart.Consumer
+```
+
+在发送端的console会看到如图所示：
+
+![](./images/mq发送消息日志.png)
+
+而在消费端的console会看到如图所示：
+
+![](./images/消费者消费日志.png)
+
+
+
+#### 8.3.4、关闭RocketMQ
+
+```text
+# 关闭broker
+sh bin/mqshutdown broker
+
+# 关闭namesrv
+sh bin/mqshutdown namesrv
+```
+
+
+
+#### 8.3.5、RocketMQ控制台（rocketmq-console）
+
+RocketMQ-Console是RocketMQ项目的扩展插件，是一个图形化管理控制台，提供Broker集群状态查看，Topic管理，Producer、Consumer状态展示，消息查询等常用功能，这个功能在安装好RocketMQ后需要额外单独安装、运行。
+
+##### 8.3.5.1、下载
+
+进入[rocketmq-externals](https://github.com/apache/rocketmq-externals)项目的GitHub地址，如下图，可看到RocketMQ项目的诸多扩展项目，其中就包含我们需要下载的rocketmq-console。
+
+![](./images/RocketMQ-Console.png)
+
+
+
+克隆项目到本地
+
+```text
+git clone  https://github.com/apache/rocketmq-externals.git
+```
+
+进入rocketmq-console项目文件夹下，修改src/main/resources/application.properties。
+
+```properties
+server.address=0.0.0.0
+server.port=8080
+
+### SSL setting
+#server.ssl.key-store=classpath:rmqcngkeystore.jks
+#server.ssl.key-store-password=rocketmq
+#server.ssl.keyStoreType=PKCS12
+#server.ssl.keyAlias=rmqcngkey
+
+#spring.application.index=true
+spring.application.name=rocketmq-console
+spring.http.encoding.charset=UTF-8
+spring.http.encoding.enabled=true
+spring.http.encoding.force=true
+logging.level.root=INFO
+logging.config=classpath:logback.xml
+
+##################################################
+# update
+#if this value is empty,use env value rocketmq.config.namesrvAddr  NAMESRV_ADDR | now, you can set it in ops page.default localhost:9876
+rocketmq.config.namesrvAddr=localhost:9876
+##################################################
+
+#if you use rocketmq version < 3.5.8, rocketmq.config.isVIPChannel should be false.default true
+rocketmq.config.isVIPChannel=
+#rocketmq-console's data path:dashboard/monitor
+rocketmq.config.dataPath=/tmp/rocketmq-console/data
+#set it false if you don't want use dashboard.default true
+rocketmq.config.enableDashBoardCollect=true
+#set the message track trace topic if you don't want use the default one
+rocketmq.config.msgTrackTopicName=
+rocketmq.config.ticketKey=ticket
+
+#Must create userInfo file: ${rocketmq.config.dataPath}/users.properties if the login is required
+rocketmq.config.loginRequired=false
+
+#set the accessKey and secretKey if you used acl
+#rocketmq.config.accessKey=
+#rocketmq.config.secretKey=
+```
+
+将项目打包成jar包。
+
+```text
+mvn clean package -Dmaven.test.skip=true
+```
+
+上传至服务器上，并执行。
+
+```text
+#如果配置文件没有填写Name Server的话，可以在启动项目时指定namesrvAddr
+$ java -jar rocketmq-console-ng-xxx.jar --rocketmq.config.namesrvAddr=ip:9876
+
+#因为本文在打包时配置了namesrvAddr，故而执行如下命令
+$ java -jar rocketmq-console-ng-xxx.jar
+```
+
+为了让console服务能够后台一直运行，则执行如下命令：
+
+```text
+nohup java -jar rocketmq-console-ng-xxx.jar > log.file  2>&1 &
+```
+
+等服务起来之后，访问http://ip:8080端口，即可看到RocketMQ的控制台。如图所示：
+
+![](./images/RocketMQ控制台.png)
+
+具体怎么使用，不是本章的重点，此处忽略，能看即可。
+
+
+
+### 8.4、实践：使用RocketMQ实现消息最终一致性
+
+#### 8.4.1、启动RocketMQ
+
+如果使用的是Linux/Centos部署的RocketMQ的话，那么需要注意以下问题：==在启动之前，需要修改broker的映射地址，因为发送消息的时候，是往broker的topic通道中发送，所以broker的地址需要能在外网访问，默认启动broker的时候是以内网ip作为broker地址，这样外部程序就无法连接，导致发送失败，则需要修改成外部程序能够访问的ip。当然如果是放在同一套环境下或者内网ip能够访问的情况，可以忽略该步骤。==
+
+```properties
+# 在Rocket的conf目录下有个broker.conf文件，新增一行配置信息
+
+###################################
+#add， 最好是公网ip，避免虚拟机地址一直变更
+brokerIP1=192.168.213.130
+###################################
+```
+
+完成修改之后，然后分别执行启动namesrv和broker：
+
+```text
+# 启动namesrv
+nohup sh bin/mqnamesrv &
+
+# 启动broker，指定配置文件和namesrv，并让其自动创建topic
+nohup bin/mqbroker -n 实际服务器ip:9876 -c /usr/local/rocketmq/rocketmq-all-4.8.0-bin-release/conf/broker.conf autoCreateTopicEnable=true &
+```
+
+使用控制台console就能看到broker的ip就变成外部程序能够访问的ip了。
+
+![](./images/broker的外网地址.png)
+
+#### 8.4.2、执行sql脚本
+
+该两个文件已存放在项目根目录的sql/msg的目录中。
+
+* 1、新建bank1服务对应的数据库distributed-tx-msg-bank1，执行如下sql：
+
+```sql
+create database distributed-tx-msg-bank1 character set utf8mb4;
+
+use distributed-tx-msg-bank1;
+
+DROP TABLE IF EXISTS `t_account`;
+CREATE TABLE `t_account`  (
+  `id` bigint(0) NOT NULL,
+  `account` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL comment '账户名',
+  `balance` decimal(5, 2) NOT NULL comment '账户余额',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic comment='账户表';
+
+INSERT INTO `t_account`(`id`, `account`, `balance`) VALUES (1, 'zhangsan', 100.00);
+
+DROP TABLE IF EXISTS `tx_duplication`;
+CREATE TABLE `tx_duplication`  (
+   `tx_no` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '事务id',
+   `create_time` datetime(0) NULL DEFAULT NULL,
+   PRIMARY KEY (`tx_no`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin COMMENT = '事务记录表（去重表），用于幂等控制' ROW_FORMAT = Dynamic;
+
+```
+
+* 2、新建bank2服务对应的数据库distributed-tx-msg-bank2，执行如下sql：
+
+```sql
+create database distributed-tx-msg-bank2 character set utf8mb4;
+
+use distributed-tx-msg-bank2;
+
+DROP TABLE IF EXISTS `t_account`;
+CREATE TABLE `t_account`  (
+    `id` bigint(0) NOT NULL,
+    `account` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL comment '账户名',
+    `balance` decimal(5, 2) NOT NULL comment '账户余额',
+    PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic comment='账户表';
+
+INSERT INTO `t_account`(`id`, `account`, `balance`) VALUES (2, 'lisi', 0.00);
+
+DROP TABLE IF EXISTS `tx_duplication`;
+CREATE TABLE `tx_duplication`  (
+   `tx_no` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '事务id',
+   `create_time` datetime(0) NULL DEFAULT NULL,
+   PRIMARY KEY (`tx_no`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin COMMENT = '事务记录表（去重表），用于幂等控制' ROW_FORMAT = Dynamic;
+
+```
+
+其中在每个数据库中都额外新增一张表tx_duplication，用于记录事务幂等控制。
+
+
+
+#### 8.4.3、添加RocketMQ依赖
+
+```xml
+<!-- https://mvnrepository.com/artifact/org.apache.rocketmq/rocketmq-spring-boot-starter -->
+<dependency>
+    <groupId>org.apache.rocketmq</groupId>
+    <artifactId>rocketmq-spring-boot-starter</artifactId>
+    <version>2.2.0</version>
+</dependency>
+```
+
+##### 8.4.3.1、RocketMQ版本不兼容问题（了解）
+
+关于 `rocketmq-spring-boot-starter` 的版本问题，小于2.1.0之前的版本，在事务消息处有几个重要的改动：
+
+* **RocketMQTemplate**#sendMessageInTransaction的参数从4个变成了3个，去除了txProducerGroup：
+
+  2.1.0之前：
+```java
+/**
+     * Send Spring Message in Transaction
+     *
+     * @param txProducerGroup the validate txProducerGroup name, set null if using the default name
+     * @param destination     destination formats: `topicName:tags`
+     * @param message         message {@link org.springframework.messaging.Message}
+     * @param arg             ext arg
+     * @return TransactionSendResult
+     * @throws MessagingException
+     */
+public TransactionSendResult sendMessageInTransaction(final String txProducerGroup, final String destination, final Message<?> message, final Object arg) throws MessagingException {
+    try {
+        TransactionMQProducer txProducer = this.stageMQProducer(txProducerGroup);
+        org.apache.rocketmq.common.message.Message rocketMsg = RocketMQUtil.convertToRocketMessage(objectMapper,
+                                                                                                   charset, destination, message);
+        return txProducer.sendMessageInTransaction(rocketMsg, arg);
+    } catch (MQClientException e) {
+        throw RocketMQUtil.convert(e);
+    }
+}
+```
+
+​		2.1.0及其之后：
+
+  ```java
+  /**
+       * Send Spring Message in Transaction
+       *
+       * @param destination destination formats: `topicName:tags`
+       * @param message message {@link org.springframework.messaging.Message}
+       * @param arg ext arg
+       * @return TransactionSendResult
+       * @throws MessagingException
+       */
+  public TransactionSendResult sendMessageInTransaction(final String destination,
+                                                        final Message<?> message, final Object arg) throws MessagingException {
+      try {
+          if (((TransactionMQProducer) producer).getTransactionListener() == null) {
+              throw new IllegalStateException("The rocketMQTemplate does not exist TransactionListener");
+          }
+          org.apache.rocketmq.common.message.Message rocketMsg = this.createRocketMqMessage(destination, message);
+          return producer.sendMessageInTransaction(rocketMsg, arg);
+      } catch (MQClientException e) {
+          throw RocketMQUtil.convert(e);
+      }
+  }
+  ```
+
+* **@RocketMQTransactionListener**注解中也同样移除了txProducerGroup：
+
+2.1.0之前：
+
+```java
+@Target({ElementType.TYPE, ElementType.ANNOTATION_TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Component
+public @interface RocketMQTransactionListener {
+ 
+    /**
+     * Set ExecutorService params -- corePoolSize
+     */
+    int corePoolSize() default 1;
+ 
+    /**
+     * Set ExecutorService params -- maximumPoolSize
+     */
+    int maximumPoolSize() default 1;
+ 
+    /**
+     * Set ExecutorService params -- keepAliveTime
+     */
+    long keepAliveTime() default 1000 * 60; //60ms
+ 
+    /**
+     * Set ExecutorService params -- blockingQueueSize
+     */
+    int blockingQueueSize() default 2000;
+ 
+    /**
+     * Set rocketMQTemplate bean name, the default is rocketMQTemplate.
+     * if use ExtRocketMQTemplate, can set ExtRocketMQTemplate bean name.
+     */
+    String rocketMQTemplateBeanName() default "rocketMQTemplate";
+    
+    String txProducerGroup();
+ 
+}
+```
+
+2.1.0及其之后：
+
+```java
+@Target({ElementType.TYPE, ElementType.ANNOTATION_TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Component
+public @interface RocketMQTransactionListener {
+ 
+    /**
+     * Set ExecutorService params -- corePoolSize
+     */
+    int corePoolSize() default 1;
+ 
+    /**
+     * Set ExecutorService params -- maximumPoolSize
+     */
+    int maximumPoolSize() default 1;
+ 
+    /**
+     * Set ExecutorService params -- keepAliveTime
+     */
+    long keepAliveTime() default 1000 * 60; //60ms
+ 
+    /**
+     * Set ExecutorService params -- blockingQueueSize
+     */
+    int blockingQueueSize() default 2000;
+ 
+    /**
+     * Set rocketMQTemplate bean name, the default is rocketMQTemplate.
+     * if use ExtRocketMQTemplate, can set ExtRocketMQTemplate bean name.
+     */
+    String rocketMQTemplateBeanName() default "rocketMQTemplate";
+ 
+}
+```
+
+在rocketmq-spring-boot-starter < 2.1.0以前的项目中，可以使用多个@RocketMQTransactionListener来监听不同的txProducerGroup来发送不同类型的事务消息到topic， 但是现在在一个项目中，如果你在一个project中写了多个@RocketMQTransactionListener，项目将不能启动，启动会报
+
+```text
+java.lang.IllegalStateException: rocketMQTemplate already exists RocketMQLocalTransactionListener
+```
+
+具体可以看源码**RocketMQTransactionConfiguration**：
+
+```java
+@Configuration
+public class RocketMQTransactionConfiguration implements ApplicationContextAware, SmartInitializingSingleton {
+
+    private final static Logger log = LoggerFactory.getLogger(RocketMQTransactionConfiguration.class);
+
+    private ConfigurableApplicationContext applicationContext;
+
+    @Override public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = (ConfigurableApplicationContext) applicationContext;
+    }
+
+    @Override public void afterSingletonsInstantiated() {
+        Map<String, Object> beans = this.applicationContext.getBeansWithAnnotation(RocketMQTransactionListener.class)
+            .entrySet().stream().filter(entry -> !ScopedProxyUtils.isScopedTarget(entry.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        beans.forEach(this::registerTransactionListener);
+    }
+
+    private void registerTransactionListener(String beanName, Object bean) {
+        Class<?> clazz = AopProxyUtils.ultimateTargetClass(bean);
+
+        if (!RocketMQLocalTransactionListener.class.isAssignableFrom(bean.getClass())) {
+            throw new IllegalStateException(clazz + " is not instance of " + RocketMQLocalTransactionListener.class.getName());
+        }
+        RocketMQTransactionListener annotation = clazz.getAnnotation(RocketMQTransactionListener.class);
+        RocketMQTemplate rocketMQTemplate = (RocketMQTemplate) applicationContext.getBean(annotation.rocketMQTemplateBeanName());
+        if (((TransactionMQProducer) rocketMQTemplate.getProducer()).getTransactionListener() != null) {
+            throw new IllegalStateException(annotation.rocketMQTemplateBeanName() + " already exists RocketMQLocalTransactionListener");
+        }
+        ((TransactionMQProducer) rocketMQTemplate.getProducer()).setExecutorService(new ThreadPoolExecutor(annotation.corePoolSize(), annotation.maximumPoolSize(),
+            annotation.keepAliveTime(), TimeUnit.MILLISECONDS, new LinkedBlockingDeque<>(annotation.blockingQueueSize())));
+        ((TransactionMQProducer) rocketMQTemplate.getProducer()).setTransactionListener(RocketMQUtil.convert((RocketMQLocalTransactionListener) bean));
+        log.debug("RocketMQLocalTransactionListener {} register to {} success", clazz.getName(), annotation.rocketMQTemplateBeanName());
+    }
+}
+```
+
+也就是说项目中只能有一个@RocketMQTransactionListener, 不能出现多个，所以去除了txProducerGroup。
+
+在客户端，首先用户需要实现RocketMQLocalTransactionListener接口，并在接口类上注解声明 @RocketMQTransactionListener，实现确认和回查方法；然后再使用资源模板 RocketMQTemplate， 调用方法sendMessageInTransaction()来进行消息的发布。 注意：从 RocketMQ-Spring 2.1.0版本之后，注解@RocketMQTransactionListener不能设置 txProducerGroup、ak、sk，这些值均与对应的RocketMQTemplate保持一致。
+
+RocketMQTemplate的初始化可以看RocketMQ的自动配置类**RocketMQAutoConfiguration**，此处忽略。
+
+
+
+
+#### 8.4.4、修改项目配置文件
+
+##### 8.4.4.1、bank1的配置文件
+
+```yaml
+server:
+  port: 8081
+
+# 实际虚拟机地址
+server-ip: 192.168.213.130
+
+nacos-server: ${server-ip}:8848
+
+spring:
+  application:
+    name: distributed-tx-msg-bank1
+  cloud:
+    nacos:
+      config:
+        server-addr: ${nacos-server}
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        namespace: ${nacos-namespace:public}
+        file-extension: yml
+        extension-configs:
+          - dataId: common_datasource.yml
+            refresh: true
+        enabled: true # 启用nacos配置，默认为true
+        max-retry: 5
+        config-long-poll-timeout: 30000
+      discovery:
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        server-addr: ${nacos-server}
+        namespace: ${nacos-namespace:public}
+#        register-enabled: true # 是否注册，默认true（注册）
+#        enabled: true # 启用服务发现功能， 默认为true
+
+# 防止nacos狂刷
+logging:
+  level:
+    com.alibaba.nacos.client: error
+
+ribbon:
+  ConnectTimeout: 3000
+  ReadTimeout: 6000
+   
+rocketmq:
+  name-server: ${server-ip}:9876
+  producer:
+    group: producer_bank1 # 生产者的组
+
+```
+其余配置项都存放在Nacos上：
+
+common_datasource.yml
+
+```yaml
+mysql:
+    host: 192.168.213.130
+    username: caychen
+    password: 1qaz@WSX
+```
+
+distributed-tx-msg-bank1.yml
+
+```yaml
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${mysql.host}:3306/distributed-tx-msg-bank1?useSSL=false&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+    username: ${mysql.username}
+    password: ${mysql.password}
+    hikari:
+      # 最小空闲连接数量
+      minimum-idle: 5
+      # 空闲连接存活最大时间，默认600000（10分钟）
+      idle-timeout: 180000
+      # 连接池最大连接数，默认是10
+      maximum-pool-size: 10
+      # 此属性控制从池返回的连接的默认自动提交行为,默认值：true
+      auto-commit: true
+      # 连接池名称
+      pool-name: MyHikariCP
+      # 此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
+      max-lifetime: 1800000
+      # 数据库连接超时时间,默认30秒，即30000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+mybatis-plus:
+  configuration:
+    # 驼峰下划线转换
+    map-underscore-to-camel-case: true
+    auto-mapping-behavior: full
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  global-config:
+    # 逻辑删除配置
+    db-config:
+      # 删除前
+      logic-not-delete-value: 1
+      # 删除后
+      logic-delete-value: 0
+  type-aliases-package: com.caychen.seata.bank.entity
+```
+
+
+
+##### 8.4.4.2、bank2的配置文件
+
+同bank1类似， 除了如下：
+
+```yaml
+server:
+  # 端口不一样
+  port: 8082
+
+spring:
+  application:
+    # 项目名不一样
+    name: distributed-tx-msg-bank2
+    
+  datasource:
+    # 数据库名不一样
+    url: jdbc:mysql://${mysql.host}:3306/distributed-tx-msg-bank2?useSSL=false&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+```
+
+
+
+#### 8.4.5、业务逻辑代码
+
+##### 8.4.5.1、bank1部分代码
+
+（1）、用于自动填充的配置类
+
+```java
+@Component
+@Slf4j
+public class AutoFillConfig implements MetaObjectHandler {
+
+    @Override
+    public void insertFill(MetaObject metaObject) {
+        log.info("start insert fill ....");
+        this.strictInsertFill(metaObject, "createTime", Date.class, new Date()); // 起始版本 3.3.0(推荐使用)
+    }
+
+    @Override
+    public void updateFill(MetaObject metaObject) {
+    }
+}
+
+```
+
+（2）、bank1生产者的topic信息
+
+```java
+@Data
+@ConfigurationProperties("bank1.producer")
+public class TopicProperties {
+
+    private String topic;
+
+    private String tag;
+}
+```
+
+（3）、请求交互类
+
+```java
+@Data
+public class TransferRequest {
+
+    @NotNull
+    private Long fromId;
+
+    @NotNull
+    private Long toId;
+
+    @NotNull
+    private BigDecimal money;
+
+    private String txNo;
+}
+```
+
+（4）、实体类
+
+```java
+@Data
+@TableName(value = "t_account")
+public class Account {
+
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
+
+    private String account;
+
+    private BigDecimal balance;
+}
+
+@Data
+@TableName(value = "tx_duplication")
+public class TxDuplication {
+
+    @TableId(type = IdType.INPUT)
+    @TableField("tx_no")
+    private String txNo;
+
+    @TableField(value = "create_time", fill = FieldFill.INSERT)
+    private Date createTime;
+
+}
+```
+
+（5）、Dao类
+
+```java
+@Mapper
+public interface ITxDuplicationMapper extends BaseMapper<TxDuplication> {
+}
+
+@Mapper
+public interface IAccountMapper extends BaseMapper<Account> {
+}
+```
+
+（6）、业务接口及实现类
+
+```java
+public interface ITransferService {
+
+    /**
+     * 转账前的准备，即发送mq消息
+     *
+     * @param transferRequest
+     * @return
+     * @throws Exception
+     */
+    Boolean transfer(TransferRequest transferRequest) throws Exception;
+
+    /**
+     * 更新账户，扣减金额
+     *
+     * @param transferRequest
+     * @return
+     * @throws Exception
+     */
+    Boolean doTransfer(TransferRequest transferRequest) throws Exception;
+}
+```
+
+```java
+@Slf4j
+@Service
+@EnableConfigurationProperties(TopicProperties.class)
+public class TransferServiceImpl implements ITransferService {
+
+    @Autowired
+    private IAccountMapper accountMapper;
+
+    @Autowired
+    private RocketMQTemplate rocketMQTemplate;
+
+    @Autowired
+    private TopicProperties topicProperties;
+
+    @Autowired
+    private ITxDuplicationMapper txDuplicationMapper;
+
+    /**
+     * 转账前的准备，即发送mq消息
+     *
+     * @param transferRequest
+     * @return
+     * @throws Exception
+     */
+    @Override
+    public Boolean transfer(TransferRequest transferRequest) {
+        //发送mq的事务消息
+        Message message = MessageBuilder.withPayload(JSON.toJSONString(transferRequest)).build();
+
+        /**
+         * @param destination destination formats: `topicName:tags`
+         * @param message message {@link org.springframework.messaging.Message}
+         * @param arg ext arg
+         *
+         */
+        String destination = topicProperties.getTopic();
+        rocketMQTemplate.sendMessageInTransaction(destination, message, null);
+        return Boolean.TRUE;
+    }
+
+    /**
+     * 执行本地事务：更新账户，扣减金额
+     *
+     * @param transferRequest
+     * @return
+     * @throws Exception
+     */
+    @Override
+    @Transactional
+    public Boolean doTransfer(TransferRequest transferRequest) throws Exception {
+        log.info("开始更新bank1的账户信息...");
+        String txNo = transferRequest.getTxNo();
+        //判断幂等性
+        Integer count = txDuplicationMapper.selectCount(
+                new LambdaQueryWrapper<TxDuplication>()
+                        .eq(TxDuplication::getTxNo, txNo)
+        );
+
+        //如果count==0，则执行本地事务
+        if (count == 0) {
+            Account account = accountMapper.selectById(transferRequest.getFromId());
+            BigDecimal balance = account.getBalance();
+
+            //检查余额
+            if (balance.compareTo(transferRequest.getMoney()) >= 0) {
+                account.setBalance(balance.subtract(transferRequest.getMoney()));
+                accountMapper.updateById(account);
+
+                //保存事务id
+                TxDuplication txDuplication = new TxDuplication();
+                txDuplication.setTxNo(txNo);
+                txDuplicationMapper.insert(txDuplication);
+
+                log.info("完成bank1账户更新操作...");
+                return Boolean.TRUE;
+            } else {
+                log.error("余额不足，无法转账");
+                throw new Exception("余额不足，无法转账");
+            }
+        } else {
+            //否则直接返回
+            log.warn("无须操作...");
+            return Boolean.FALSE;
+        }
+    }
+
+}
+```
+
+（7）、Controller控制器类
+
+```java
+@RestController
+@RequestMapping("/v1/bank1/transfer")
+public class TransferController {
+
+    @Autowired
+    private ITransferService transferService;
+
+    @PostMapping
+    public String transferMoney(@RequestBody @Validated TransferRequest transferRequest) throws Exception {
+        transferRequest.setTxNo(UUID.randomUUID().toString().replace("-", ""));
+        Boolean transferFlag = transferService.transfer(transferRequest);
+        return transferFlag ? "success" : "fail";
+    }
+}
+```
+
+（8）、最重要的：事务消息监听器
+
+```java
+@Slf4j
+@Component
+@RocketMQTransactionListener
+public class ProducerTxmsgListener implements RocketMQLocalTransactionListener {
+
+    @Autowired
+    private ITransferService transferService;
+
+    @Autowired
+    private ITxDuplicationMapper txDuplicationMapper;
+
+    /**
+     * RocketMQ发送者发送事务消息之后的回调
+     *
+     * @param msg
+     * @param arg
+     * @return
+     */
+    @Override
+    public RocketMQLocalTransactionState executeLocalTransaction(Message msg, Object arg) {
+        log.info("开始事务消息回调");
+        try {
+            String messageString = new String((byte[]) msg.getPayload());
+            TransferRequest transferRequest = JSON.parseObject(messageString, TransferRequest.class);
+            log.info("消息回调txNo: [{}]", transferRequest.getTxNo());
+            
+            transferService.doTransfer(transferRequest);
+
+            //模拟三种状态的场景
+            BigDecimal money = transferRequest.getMoney();
+            if (money.compareTo(new BigDecimal("5")) == 0) {
+                //提交commit
+                //正常返回，则进行commit，自动向mq发送commit消息，mq消息的状态则变为可消费
+                return RocketMQLocalTransactionState.COMMIT;
+            } else if (money.compareTo(new BigDecimal("10")) == 0) {
+                //提交unknown，事务回查
+                return RocketMQLocalTransactionState.UNKNOWN;
+            } else if (money.compareTo(new BigDecimal("20")) == 0) {
+                //提交rollback，消息删除
+                return RocketMQLocalTransactionState.ROLLBACK;
+            } else {
+                //其他提交commit
+                return RocketMQLocalTransactionState.COMMIT;
+            }
+        } catch (Exception e) {
+            log.error("发生异常：", e);
+            //异常返回，进行rollback，自动向mq发送rollback消息，mq消息则被删除
+            return RocketMQLocalTransactionState.ROLLBACK;
+        }
+
+    }
+
+    /**
+     * 事务回查
+     *
+     * @param msg
+     * @return
+     */
+    @Override
+    public RocketMQLocalTransactionState checkLocalTransaction(Message msg) {
+        String messageString = new String((byte[]) msg.getPayload());
+        TransferRequest transferRequest = JSON.parseObject(messageString, TransferRequest.class);
+        log.info("回查txNo: [{}]", transferRequest.getTxNo());
+
+        //判断幂等性
+        Integer count = txDuplicationMapper.selectCount(
+                new LambdaQueryWrapper<TxDuplication>()
+                        .eq(TxDuplication::getTxNo, transferRequest.getTxNo())
+        );
+        if (count > 0) {
+            //如果查询到，则发送commit
+            return RocketMQLocalTransactionState.COMMIT;
+        }
+
+        //如果未查询到，则发送unknown
+        return RocketMQLocalTransactionState.UNKNOWN;
+    }
+}
+```
+
+
+
+##### 8.4.5.2、bank2部分代码
+
+（1）、AutoFillConfig，IAccountMapper，ITxDuplicationMapper，TransferRequest，Account，TxDuplication同bank1一模一样，此处就不粘贴了。
+
+（2）、业务接口及其实现类
+
+```java
+public interface IAccountService {
+
+    /**
+     * 新增账户金额
+     *
+     * @param transferRequest
+     */
+    void addAccountInfoBalance(TransferRequest transferRequest) throws Exception;
+}
+```
+
+```java
+@Slf4j
+@Service
+public class AccountServiceImpl implements IAccountService {
+
+    @Autowired
+    private IAccountMapper accountMapper;
+
+    @Autowired
+    private ITxDuplicationMapper txDuplicationMapper;
+
+    /**
+     * 增加账户金额
+     *
+     * @param transferRequest
+     * @throws Exception
+     */
+    @Override
+    @Transactional
+    public void addAccountInfoBalance(TransferRequest transferRequest) throws Exception {
+        log.info("开始更新bank2的账户信息...");
+        String txNo = transferRequest.getTxNo();
+
+        //判断幂等性
+        Integer count = txDuplicationMapper.selectCount(
+                new LambdaQueryWrapper<TxDuplication>()
+                        .eq(TxDuplication::getTxNo, txNo)
+        );
+
+        if (count > 0) {
+            log.warn("无须操作...");
+            return;
+        }
+
+        Account account = accountMapper.selectById(transferRequest.getToId());
+        if (account == null) {
+            log.error("账户信息不存在...");
+            throw new Exception("账户信息不存在...");
+        }
+
+        account.setBalance(account.getBalance().add(transferRequest.getMoney()));
+        accountMapper.updateById(account);
+
+        TxDuplication txDuplication = new TxDuplication();
+        txDuplication.setTxNo(txNo);
+        txDuplicationMapper.insert(txDuplication);
+        log.info("完成bank2账户更新操作...");
+    }
+}
+```
+
+（3）、订阅方的消息消费逻辑
+
+```java
+@Slf4j
+@Component
+@RocketMQMessageListener(topic = "${bank2.consumer.topic}", consumerGroup = "${rocketmq.consumer.group}")
+public class Bank2RocketMessageConsumer implements RocketMQListener<String> {
+
+    @Autowired
+    private IAccountService accountService;
+
+    @Override
+    public void onMessage(String message) {
+        log.info("bank2接收到消息：[{}]", message);
+
+        TransferRequest transferRequest = JSON.parseObject(message, TransferRequest.class);
+        log.info("消费txNo: [{}]", transferRequest.getTxNo());
+
+        try {
+            accountService.addAccountInfoBalance(transferRequest);
+            log.info("bank2消费成功...");
+        } catch (Exception e) {
+            e.printStackTrace();
+            log.error("bank2消费失败...");
+        }
+    }
+}
+```
+
+
+
+#### 8.4.6、测试场景
+
+##### 8.4.6.1、正常流程：
+
+```
+POST http://localhost:8081/v1/bank1/transfer
+Accept: */*
+Content-Type: application/json;charset=utf-8
+
+{
+  "toId": 2,
+  "fromId": 1,
+  "money": 20
+}
+```
+
+bank1的余额情况如图：
+
+![](./images/msg之账户1的余额情况.png)
+
+bank1的事务情况如图：
+
+![](./images/msg之账户1的事务情况.png)
+
+bank2的余额情况如图：
+
+![](./images/msg之账户2的余额情况.png)
+
+bank2的事务情况如图：
+
+![](./images/msg之账户2的事务情况.png)
+
+在正常流程的情况下，bank1库的tx_duplication表中的数据和bank2库的tx_duplication表中的数据基本一致，只是时间不同而已。
+
+
+
+##### 8.4.6.2、bank1的异常场景
+
+```text
+POST http://localhost:8081/v1/bank1/transfer
+Accept: */*
+Content-Type: application/json;charset=utf-8
+
+{
+  "toId": 2,
+  "fromId": 1,
+  "money": 100
+}
+```
+
+使用上述请求，转账金额超过bank1中用户的余额，则转账失败，bank1的本地事务被回滚，同时MQ消息则被删除，bank2就消费不到这条消息。
+
+
+
+##### 8.4.6.3、bank2的异常场景
+
+```text
+POST http://localhost:8081/v1/bank1/transfer
+Accept: */*
+Content-Type: application/json;charset=utf-8
+
+{
+  "toId": 3,
+  "fromId": 1,
+  "money": 5
+}
+```
+
+使用上述请求，bank1能正常提交本地事务，bank1扣减金额正常，bank1的业务流程完毕；而bank2在消费消息的时候，由于toId对应的账户信息不存在，导致消息消费失败，则会一直重试，直到消费成功为止。
+
+bank1正常执行业务之后的余额如图：
+
+![](./images/msg之bank1正常执行业务之后的余额.png)
+
+bank1正常执行业务之后的事务如图：
+
+![](./images/msg之bank1正常执行业务之后的事务.png)
+
+bank2异常消费之后的余额如图：
+
+![](./images/msg之bank2异常消费之后的余额.png)
+
+bank2异常消费之后的事务如图：
+
+![](./images/msg之bank2异常消费之后的事务.png)
+
+
+
+可以看出来，两个账户的余额总数少了5，同时bank1的事务记录数比bank2的事务记录数多一条。
+
+
+
+##### 8.4.6.4、事务回查
+
+```text
+POST http://localhost:8081/v1/bank1/transfer
+Accept: */*
+Content-Type: application/json;charset=utf-8
+
+{
+  "toId": 2,
+  "fromId": 1,
+  "money": 10
+}
+```
+
+由于money=10，会提交unknown，则mq会定时进行回查。
+
+![](./images/模拟事务回查.png)
+
+过了一会儿，断点就会停留在回查方法里。
+
+![](./images/事务消息的回查机制.png)
+
+
+
+
+
+
+
+
+## 9、分布式事务解决方案之最大努力通知
 
 最大努力通知的方案实现比较简单，适用于一些最终一致性要求较低的业务。
 
