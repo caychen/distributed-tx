@@ -1,3 +1,7 @@
+create database distributed-tx-seata-bank2 character set utf8mb4;
+
+use distributed-tx-seata-bank2;
+
 -- for AT mode you must to init this sql for you business database. the seata server not need it.
 CREATE TABLE IF NOT EXISTS `undo_log`
 (
@@ -12,3 +16,13 @@ CREATE TABLE IF NOT EXISTS `undo_log`
     ) ENGINE = InnoDB
     AUTO_INCREMENT = 1
     DEFAULT CHARSET = utf8 COMMENT ='AT transaction mode undo table';
+
+DROP TABLE IF EXISTS `t_account`;
+CREATE TABLE `t_account`  (
+  `id` bigint(0) NOT NULL,
+  `account` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL comment '账户名',
+  `balance` decimal(5, 2) NOT NULL comment '账户余额',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic comment='账户表';
+
+INSERT INTO `t_account`(`id`, `account`, `balance`) VALUES (2, 'lisi', 0.00);
