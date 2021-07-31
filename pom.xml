@@ -18,6 +18,9 @@
 
     <modules>
         <module>distributed-tx-seata</module>
+        <module>distributed-tx-hmily</module>
+        <module>distributed-tx-msg</module>
+        <module>distributed-tx-notice</module>
     </modules>
 
     <properties>
