@@ -43,4 +43,4 @@ mybatis-plus:
       logic-not-delete-value: 1
       # 删除后
       logic-delete-value: 0
-  type-aliases-package: com.caychen.seata.bank.entity
+  type-aliases-package: com.caychen.msg.bank2.entity
