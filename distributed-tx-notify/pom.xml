@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.caychen</groupId>
         <artifactId>distributed-tx</artifactId>
         <version>0.0.1-SNAPSHOT</version>
-        <relativePath/> <!-- lookup parent from repository -->
+<!--        <relativePath/> &lt;!&ndash; lookup parent from repository &ndash;&gt;-->
     </parent>
 
     <groupId>com.caychen</groupId>
-    <artifactId>distributed-tx-notice</artifactId>
+    <artifactId>distributed-tx-notify</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>distributed-tx-notice</name>
+    <name>distributed-tx-notify</name>
     <packaging>pom</packaging>
 
     <modules>
-        <module>distributed-tx-notice-pay</module>
-        <module>distributed-tx-notice-user</module>
+        <module>distributed-tx-notify-pay</module>
+        <module>distributed-tx-notify-account</module>
     </modules>
 
     <properties>
@@ -64,6 +64,14 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.rocketmq/rocketmq-spring-boot-starter -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>2.2.0</version>
+        </dependency>
+
     </dependencies>
 
 </project>
