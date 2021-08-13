@@ -1544,7 +1544,7 @@ mybatis-plus:
       logic-not-delete-value: 1
       # 删除后
       logic-delete-value: 0
-  type-aliases-package: com.caychen.seata.bank.entity
+  type-aliases-package: com.caychen.msg.bank1.entity
 ```
 
 
@@ -1566,6 +1566,10 @@ spring:
   datasource:
     # 数据库名不一样
     url: jdbc:mysql://${mysql.host}:3306/distributed-tx-msg-bank2?useSSL=false&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+    
+mybatis-plus:
+	# 包名不一样
+    type-aliases-package: com.caychen.msg.bank2.entity
 ```
 
 
@@ -2109,6 +2113,8 @@ Content-Type: application/json;charset=utf-8
 
 ## 9、分布式事务解决方案之最大努力通知
 
+### 9.1、基础理论
+
 最大努力通知的方案实现比较简单，适用于一些最终一致性要求较低的业务。
 
 执行流程：
@@ -2116,6 +2122,326 @@ Content-Type: application/json;charset=utf-8
 - 系统 A 本地事务执行完之后，发送个消息到 MQ；
 - 这里会有个专门消费 MQ 的服务，这个服务会消费 MQ 并调用系统 B 的接口；
 - 要是系统 B 执行成功就 ok 了；要是系统 B 执行失败了，那么最大努力通知服务就定时尝试重新调用系统 B, 反复 N 次，最后还是不行就放弃。
+
+
+
+### 9.2 、案例和执行流程
+
+#### 9.2.1、充值案例
+
+最常见的最大努力通知的例子就是支付宝、微信、银联或者第三方支付系统的转账充值流程，简易图如下：
+
+
+
+![](./images/最大努力通知案例之支付宝和微信转账.jpg)
+
+
+
+交互流程:
+
+（1）、账户系统调用充值系统接口；
+
+（2）、充值系统完成支付处理向账户系统发起充值结果通知，若通知失败，则充值系统按策略进行重复通知；
+
+（3）、账户系统接收到充值结果通知修改充值状态；
+
+（4）、账户系统未接收到通知会主动调用充值系统的接口查询充值结果。
+
+
+
+#### 9.2.2、目标与实现
+
+==**目标：发起通知方通过一定的机制最大努力将业务处理结果通知到接收方。**==
+
+具体实现包括：
+
+（1）、有一定的消息重复通知机制。因为接收通知方可能没有接收到通知，此时要有一定的机制对消息重复通知。
+
+（2）、消息校对机制。如果尽最大努力也没有通知到接收方，或者接收方消费消息后要再次消费，此时可由接收方主动向通知方查询消息信息来满足需求。
+
+
+
+#### 9.2.3、最大努力通知与可靠消息一致性的区别
+
+* 1、解决方案思想不同
+
+可靠消息一致性：发起通知方需要保证将消息发出去，并且将消息发到接收通知方，消息的可靠性关键由**发起通知方**来保证。
+
+最大努力通知：发起通知方尽最大的努力将业务处理结果通知为接收通知方，但是可能消息接收不到，此时需要接收通知方主动调用发起通知方的接口查询业务处理结果，通知的可靠性关键在**接收通知方**。
+
+* 2、两者的业务应用场景不同
+
+可靠消息一致性关注的是交易过程的事务一致，以异步的方式完成交易。
+
+最大努力通知关注的是交易后的通知事务，即将交易结果可靠的通知出去。
+
+* 3、技术解决方向不同
+
+可靠消息一致性要解决消息从发出到接收的一致性，即消息发出并且被接收到。
+
+最大努力通知无法保证消息从发出到接收的一致性，只提供消息接收的可靠性机制。可靠机制是，最大努力的将消息通知给接收方，当消息无法被接收方接收时，由接收方主动查询消息（业务处理结果）。
+
+
+
+### 9.3、解决方案
+
+#### 9.3.1、内部系统之间的方案1
+
+![](./images/内部系统之间的方案1.png)
+
+本方案是利用MQ的ack机制由MQ向接收通知方发送通知，流程如下：
+
+　　1、发起通知方将通知发给MQ。使用普通消息机制将通知发给MQ。
+
+　　2、接收通知方监听 MQ。
+
+　　3、接收通知方接收消息，业务处理完成回应ack。
+
+　　4、接收通知方若没有回应ack则MQ会重复通知。
+
+MQ会按照间隔1min、5min、10min、30min、1h、2h、5h、10h等时间间隔方式，逐步拉大通知间隔 （如果MQ采用rocketMq，在broker中可进行配置），直到达到通知要求的时间窗口上限。
+
+　　5、接收通知方可通过消息校对接口来校对消息的一致性。
+
+
+
+#### 9.3.2、外部系统之间的方案2
+
+![](./images/外部系统之间的方案2.png)
+
+交互流程如下：
+
+　　1、发起通知方将通知发给MQ。
+
+　　　　使用可靠消息一致方案中的事务消息保证本地事务与消息的原子性，最终将通知先发给MQ。
+
+　　2、通知程序监听 MQ，接收MQ的消息。
+
+　　　　方案1中接收通知方直接监听MQ，方案2中由通知程序监听MQ。
+
+　　　　通知程序若没有回应ack则MQ会重复通知。
+
+　　3、通知程序通过互联网接口协议（如http、webservice）调用接收通知方案接口，完成通知。
+
+　　　　通知程序调用接收通知方案接口成功就表示通知成功，即消费MQ消息成功，MQ将不再向通知程序投递通知消息。
+
+　　4、接收通知方可通过消息校对接口来校对消息的一致性。
+
+
+
+#### 9.3.3、两者的区别
+
+（1）、方案1中接收通知方与MQ接口，即接收通知方案监听 MQ，此方案主要应用与内部应用之间的通知。
+
+（2）、方案2中由通知程序与MQ接口，通知程序监听MQ，收到MQ的消息后由通知程序通过互联网接口协议调用接收通知方。此方案主要应用于外部应用之间的通知，例如支付宝、微信的支付结果通知。
+
+
+
+### 9.4、实践：使用RocketMQ实现最大努力通知型事务
+
+通过RocketMQ中间件实现最大努力通知型分布式事务，模拟充值过程。
+
+![](./images/重置简易流程.png)
+
+交互流程如下：
+
+　　1、用户请求充值系统进行充值。 
+
+　　2、充值系统完成充值将充值结果发给MQ。
+
+　　3、账户系统监听MQ，接收充值结果通知，如果接收不到消息，MQ会重复发送通知。接收到充值结果通知账户系统增加充值金额。
+
+　　4、账户系统也可以主动查询充值系统的充值结果查询接口，增加金额。
+
+
+
+#### 9.4.1、启动RocketMQ
+
+同章节8.4.1一致即可。
+
+
+
+#### 9.4.2、执行sql脚本
+
+该两个文件已存放在项目根目录的sql/notify的目录中。
+
+* 1、新建distributed-tx-notify-account服务对应的数据库distributed-tx-msg-account，执行如下sql：
+
+```sql
+create database distributed-tx-notify-account character set utf8mb4;
+
+use distributed-tx-notify-account;
+
+DROP TABLE IF EXISTS `t_account`;
+CREATE TABLE `t_account`  (
+  `id` bigint(0) NOT NULL,
+  `account` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL comment '账户名',
+  `balance` decimal(5, 2) NOT NULL comment '账户余额',
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic comment='账户表';
+
+INSERT INTO `t_account`(`id`, `account`, `balance`) VALUES (1, 'zhangsan', 100.00);
+
+DROP TABLE IF EXISTS `tx_duplication`;
+CREATE TABLE `tx_duplication`  (
+   `tx_no` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '事务id',
+   `create_time` datetime(0) NULL DEFAULT NULL,
+   PRIMARY KEY (`tx_no`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin COMMENT = '事务记录表（去重表），用于幂等控制' ROW_FORMAT = Dynamic;
+```
+
+* 2、新建distributed-tx-notify-pay服务对应的数据库distributed-tx-msg-pay，执行如下sql：
+
+```sql
+create database distributed-tx-notify-pay character set utf8mb4;
+
+use distributed-tx-notify-pay;
+
+DROP TABLE IF EXISTS `account_pay`;
+CREATE TABLE `account_pay`  (
+    `id` varchar(64)  NOT NULL,
+    `account_id` bigint(11)  NULL DEFAULT NULL COMMENT '账号id', 
+    `pay_amount` double NULL DEFAULT NULL COMMENT '充值金额',
+    `result` varchar(20)  DEFAULT NULL COMMENT '充值结果:success，fail', 
+    `create_time` datetime(0) NULL DEFAULT NULL,
+    PRIMARY KEY (`id`) USING BTREE
+)ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = Dynamic;
+```
+
+
+
+#### 9.4.3、添加RocketMQ依赖
+
+```xml
+<!-- https://mvnrepository.com/artifact/org.apache.rocketmq/rocketmq-spring-boot-starter -->
+<dependency>
+    <groupId>org.apache.rocketmq</groupId>
+    <artifactId>rocketmq-spring-boot-starter</artifactId>
+    <version>2.2.0</version>
+</dependency>
+```
+
+
+
+#### 9.4.4、修改项目配置文件
+
+##### 9.4.4.1、Account的配置文件
+
+bootstrap.yml
+
+```yaml
+server:
+  port: 8081
+
+# 实际虚拟机地址
+server-ip: 192.168.213.130
+
+nacos-server: ${server-ip}:8848
+
+spring:
+  application:
+    name: distributed-tx-notify-account
+  cloud:
+    nacos:
+      config:
+        server-addr: ${nacos-server}
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        namespace: ${nacos-namespace:public}
+        file-extension: yml
+        extension-configs:
+          - dataId: common_datasource.yml
+            refresh: true
+        enabled: true # 启用nacos配置，默认为true
+        max-retry: 5
+        config-long-poll-timeout: 30000
+      discovery:
+        username: ${nacos-username:nacos}
+        password: ${nacos-password:nacos}
+        server-addr: ${nacos-server}
+        namespace: ${nacos-namespace:public}
+#        register-enabled: true # 是否注册，默认true（注册）
+#        enabled: true # 启用服务发现功能， 默认为true
+
+# 防止nacos狂刷
+logging:
+  level:
+    com.alibaba.nacos.client: error
+
+ribbon:
+  ConnectTimeout: 3000
+  ReadTimeout: 6000
+
+rocketmq:
+  name-server: ${server-ip}:9876
+  consumer:
+    group: consumer_account # x组
+```
+
+其余放置在nacos服务器上。
+
+common_datasource.yml
+
+```yaml
+mysql:
+    host: 192.168.213.130
+    username: caychen
+    password: 1qaz@WSX
+```
+
+distributed-tx-notify-account.yml
+
+```yaml
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${mysql.host}:3306/distributed-tx-notify-account?useSSL=false&useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
+    username: ${mysql.username}
+    password: ${mysql.password}
+    hikari:
+      # 最小空闲连接数量
+      minimum-idle: 5
+      # 空闲连接存活最大时间，默认600000（10分钟）
+      idle-timeout: 180000
+      # 连接池最大连接数，默认是10
+      maximum-pool-size: 10
+      # 此属性控制从池返回的连接的默认自动提交行为,默认值：true
+      auto-commit: true
+      # 连接池名称
+      pool-name: MyHikariCP
+      # 此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
+      max-lifetime: 1800000
+      # 数据库连接超时时间,默认30秒，即30000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+mybatis-plus:
+  configuration:
+    # 驼峰下划线转换
+    map-underscore-to-camel-case: true
+    auto-mapping-behavior: full
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  mapper-locations: classpath*:mapper/**/*Mapper.xml
+  global-config:
+    # 逻辑删除配置
+    db-config:
+      # 删除前
+      logic-not-delete-value: 1
+      # 删除后
+      logic-delete-value: 0
+  type-aliases-package: com.caychen.notify.account.entity
+```
+
+
+
+
+
+##### 9.4.4.2、Pay的配置文件
+
+
 
 
 
