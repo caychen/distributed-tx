@@ -65,7 +65,7 @@ public class PullResultScheduler {
                         String txNo = depositRecord.getTxNo();
                         Boolean result = payServiceClient.queryPayResult(txNo);
 
-                        if(result == null){
+                        if (result == null) {
                             return;
                         }
 
