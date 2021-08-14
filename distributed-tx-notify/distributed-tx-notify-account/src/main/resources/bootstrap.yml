@@ -30,8 +30,20 @@ spring:
         password: ${nacos-password:nacos}
         server-addr: ${nacos-server}
         namespace: ${nacos-namespace:public}
-#        register-enabled: true # 是否注册，默认true（注册）
-#        enabled: true # 启用服务发现功能， 默认为true
+  #        register-enabled: true # 是否注册，默认true（注册）
+  #        enabled: true # 启用服务发现功能， 默认为true
+
+  # redisson 分布式锁
+  redis:
+    redisson:
+      # org.redisson.spring.starter.RedissonAutoConfiguration
+      # org.redisson.spring.starter.RedissonProperties
+      config: classpath:redisson.yml
+    jedis:
+      pool:
+        max-active: 8  #最大连接数
+        max-wait: -1 #最大阻塞等待时间(负数表示没限制)
+        max-idle: 8 #最大空闲
 
 # 防止nacos狂刷
 logging:

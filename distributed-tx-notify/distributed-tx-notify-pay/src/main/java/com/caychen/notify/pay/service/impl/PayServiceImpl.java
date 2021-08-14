@@ -14,8 +14,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -31,9 +31,6 @@ public class PayServiceImpl extends ServiceImpl<IPayRecordMapper, PayRecord> imp
     private IPayRecordMapper payRecordMapper;
 
     @Autowired
-    private RestTemplate restTemplate;
-
-    @Autowired
     private CallbackDataProducer callbackDataProducer;
 
 
@@ -47,12 +44,19 @@ public class PayServiceImpl extends ServiceImpl<IPayRecordMapper, PayRecord> imp
             log.error("捕获异常:", e);
         }
 
+        Boolean payResult = Boolean.TRUE;
+
+        BigDecimal money = depositClientRequest.getMoney();
+        if (money.compareTo(new BigDecimal("1")) == 0) {
+            payResult = Boolean.FALSE;
+        }
+
         //支付记录
         PayRecord payRecord = new PayRecord();
         payRecord.setAccountId(depositClientRequest.getAccountId());
-        payRecord.setPayAmount(depositClientRequest.getMoney());
+        payRecord.setPayAmount(money);
         payRecord.setTxNo(depositClientRequest.getTxNo());
-        payRecord.setPayResult(Boolean.TRUE);
+        payRecord.setPayResult(payResult);
         String callbackUrl = depositClientRequest.getCallbackUrl();
         payRecord.setCallbackUrl(callbackUrl);
 
@@ -60,7 +64,7 @@ public class PayServiceImpl extends ServiceImpl<IPayRecordMapper, PayRecord> imp
 
         if (count > 0) {
             CallbackData callbackData = new CallbackData();
-            callbackData.setPayResult(Boolean.TRUE);
+            callbackData.setPayResult(payResult);
             callbackData.setTxNo(depositClientRequest.getTxNo());
 
             if (StringUtils.isNotBlank(callbackUrl)) {

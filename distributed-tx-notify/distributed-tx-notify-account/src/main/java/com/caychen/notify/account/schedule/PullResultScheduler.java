@@ -66,8 +66,13 @@ public class PullResultScheduler {
                         Boolean result = payServiceClient.queryPayResult(txNo);
 
                         if (result == null) {
+                            log.error("出现异常...");
                             return;
                         }
+                        log.info("查询支付结果：[{}]", result);
+
+                        depositRecord.setResult(result ? "success" : "fail");
+                        depositRecordService.updateById(depositRecord);
 
                         Long accountId = depositRecord.getAccountId();
                         BigDecimal payAmount = depositRecord.getPayAmount();

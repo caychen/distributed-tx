@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.caychen.notify.account.consumer.CallbackData;
 import com.caychen.notify.account.dto.DepositRequest;
 import com.caychen.notify.account.entity.DepositRecord;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
